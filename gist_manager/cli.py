@@ -219,5 +219,215 @@ def config(reset):
         sys.exit(1)
 
 
+@main.command()
+@click.argument('gist_id', required=True)
+@click.argument('files', nargs=-1, type=click.Path(exists=True))
+@click.option('--description', '-d', help='Update gist description')
+@click.option('--from-dir', type=click.Path(exists=True, file_okay=False), 
+              help='Update from directory instead of individual files')
+@click.option('--patterns', multiple=True, 
+              help='File patterns when using --from-dir (e.g., "*.py" "*.md")')
+@click.option('--add', multiple=True, type=click.Path(exists=True), 
+              help='Explicitly add new files')
+@click.option('--remove', multiple=True, 
+              help='Remove files from gist (by filename)')
+@click.option('--sync', is_flag=True, 
+              help='Sync mode: remove gist files not present in directory')
+@click.option('--dry-run', is_flag=True, 
+              help='Show what would be changed without making changes')
+@click.option('--force', is_flag=True, 
+              help='Skip confirmation prompts')
+@click.option('--output', '-o', type=click.Choice(['text', 'json']), default='text', 
+              help='Output format')
+def update(gist_id, files, description, from_dir, patterns, add, remove, sync, dry_run, force, output):
+    """Update an existing gist
+    
+    GIST_ID: The ID or URL of the gist to update
+    FILES: Local files to add or update in the gist
+    
+    Examples:
+    
+        # Update individual files
+        gist update abc123def456 main.py utils.py
+        
+        # Update from directory
+        gist update abc123def456 --from-dir ./src --patterns "*.py" "*.md"
+        
+        # Sync directory (remove files not in directory)
+        gist update abc123def456 --from-dir ./src --patterns "*.py" --sync
+        
+        # Explicit operations
+        gist update abc123def456 --add new_file.py --remove old_file.py
+        
+        # Update description only
+        gist update abc123def456 --description "Updated version"
+        
+        # Preview changes
+        gist update abc123def456 *.py --dry-run
+    """
+    try:
+        # Initialize GistManager
+        manager = GistManager()
+        
+        # Validate input combinations
+        if from_dir and files:
+            click.echo("Error: Cannot use both individual files and --from-dir", err=True)
+            sys.exit(1)
+        
+        if from_dir and not patterns:
+            click.echo("Error: --patterns is required when using --from-dir", err=True)
+            sys.exit(1)
+            
+        if sync and not from_dir:
+            click.echo("Error: --sync can only be used with --from-dir", err=True)
+            sys.exit(1)
+        
+        # Collect files to process
+        files_to_update = {}
+        files_to_remove_list = list(remove) if remove else []
+        
+        # Process individual files
+        if files:
+            file_paths = [Path(f) for f in files]
+            files_to_update = manager._read_files_from_paths(file_paths)
+        
+        # Process --add files
+        if add:
+            add_paths = [Path(f) for f in add]
+            add_files = manager._read_files_from_paths(add_paths)
+            files_to_update.update(add_files)
+        
+        # Process directory
+        if from_dir:
+            if dry_run:
+                click.echo(f"Analyzing gist {gist_id}...")
+                current_gist = manager.get_gist(gist_id)
+                click.echo(f"✓ Gist found: \"{current_gist.get('description', 'No description')}\" ({len(current_gist.get('files', {}))} files)")
+                
+                click.echo(f"\nScanning directory {from_dir} with patterns: {', '.join(patterns)}")
+                
+                # Find matching files
+                directory_path = Path(from_dir)
+                matching_files = []
+                for pattern in patterns:
+                    matching_files.extend(directory_path.glob(pattern))
+                matching_files = [f for f in set(matching_files) if f.is_file()]
+                
+                if not matching_files:
+                    click.echo(f"No files found matching patterns {list(patterns)} in directory {from_dir}")
+                    sys.exit(1)
+                
+                click.echo(f"Found {len(matching_files)} matching files: {', '.join(f.name for f in matching_files)}")
+                
+                # Read files and prepare changes
+                files_data = manager._read_files_from_paths(matching_files)
+                current_files = current_gist.get("files", {})
+                
+                click.echo("\nChanges to be made:")
+                changes_found = False
+                for filename, content in files_data.items():
+                    if filename in current_files:
+                        if current_files[filename].get("content", "") != content:
+                            click.echo(f"  📝 {filename} (modified)")
+                            changes_found = True
+                    else:
+                        click.echo(f"  ➕ {filename} (new file)")
+                        changes_found = True
+                
+                if sync:
+                    for current_filename in current_files.keys():
+                        if current_filename not in files_data:
+                            click.echo(f"  ❌ {current_filename} (would be removed)")
+                            changes_found = True
+                
+                if not changes_found:
+                    click.echo("  No changes detected")
+                
+                click.echo(f"\n🔍 Dry run complete - no changes made")
+                return
+            else:
+                result = manager.update_from_directory(
+                    gist_id=gist_id,
+                    directory=from_dir,
+                    patterns=list(patterns),
+                    description=description,
+                    sync=sync
+                )
+        else:
+            # Dry run for individual files
+            if dry_run:
+                if not files_to_update and not files_to_remove_list and description is None:
+                    click.echo("Error: Nothing to update", err=True)
+                    sys.exit(1)
+                
+                click.echo(f"Analyzing gist {gist_id}...")
+                current_gist = manager.get_gist(gist_id)
+                click.echo(f"✓ Gist found: \"{current_gist.get('description', 'No description')}\" ({len(current_gist.get('files', {}))} files)")
+                
+                click.echo("\nChanges to be made:")
+                changes_found = False
+                
+                if description is not None:
+                    click.echo(f"  📄 Description: \"{description}\"")
+                    changes_found = True
+                
+                current_files = current_gist.get("files", {})
+                for filename, content in files_to_update.items():
+                    if filename in current_files:
+                        if current_files[filename].get("content", "") != content:
+                            click.echo(f"  📝 {filename} (modified)")
+                            changes_found = True
+                    else:
+                        click.echo(f"  ➕ {filename} (new file)")
+                        changes_found = True
+                
+                for filename in files_to_remove_list:
+                    if filename in current_files:
+                        click.echo(f"  ❌ {filename} (would be removed)")
+                        changes_found = True
+                
+                if not changes_found:
+                    click.echo("  No changes detected")
+                
+                click.echo(f"\n🔍 Dry run complete - no changes made")
+                return
+            
+            # Regular update
+            if not files_to_update and not files_to_remove_list and description is None:
+                click.echo("Error: Nothing to update", err=True)
+                sys.exit(1)
+            
+            # Confirmation prompt (unless --force)
+            if not force and not dry_run:
+                if not click.confirm(f"Update gist {gist_id}?"):
+                    click.echo("Update cancelled.")
+                    return
+            
+            result = manager.update_gist(
+                gist_id=gist_id,
+                files=files_to_update if files_to_update else None,
+                description=description,
+                files_to_remove=files_to_remove_list if files_to_remove_list else None
+            )
+        
+        # Output results
+        if output == 'json':
+            click.echo(json.dumps(result, indent=2))
+        else:
+            click.echo("✅ Gist updated successfully!")
+            click.echo(f"🔗 URL: {result['html_url']}")
+            if result.get('description'):
+                click.echo(f"📄 Description: {result['description']}")
+            click.echo(f"📁 Files: {len(result.get('files', {}))} total")
+            
+            # Show revision info if available
+            if 'history' in result and result['history']:
+                click.echo(f"📊 Revision: {len(result['history'])} (new revision created)")
+    
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     main()
