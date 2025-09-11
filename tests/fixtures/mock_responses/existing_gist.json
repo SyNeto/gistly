@@ -1,0 +1,39 @@
+{
+  "id": "abc123def456",
+  "html_url": "https://gist.github.com/testuser/abc123def456",
+  "git_pull_url": "https://gist.github.com/abc123def456.git",
+  "git_push_url": "https://gist.github.com/abc123def456.git",
+  "description": "My Python Project",
+  "public": false,
+  "created_at": "2024-01-01T12:00:00Z",
+  "updated_at": "2024-01-01T12:00:00Z",
+  "files": {
+    "main.py": {
+      "filename": "main.py",
+      "type": "text/x-python",
+      "language": "Python",
+      "raw_url": "https://gist.githubusercontent.com/testuser/abc123def456/raw/main.py",
+      "size": 45,
+      "content": "def main():\n    print('Hello World')\n\nif __name__ == '__main__':\n    main()"
+    },
+    "README.md": {
+      "filename": "README.md", 
+      "type": "text/markdown",
+      "language": "Markdown",
+      "raw_url": "https://gist.githubusercontent.com/testuser/abc123def456/raw/README.md",
+      "size": 25,
+      "content": "# My Python Project\n\nA simple example."
+    }
+  },
+  "history": [
+    {
+      "version": "57a7f021a713b1c5a6b199a54cc514735d2d462f",
+      "committed_at": "2024-01-01T12:00:00Z"
+    }
+  ],
+  "owner": {
+    "login": "testuser",
+    "id": 583231,
+    "node_id": "MDQ6VXNlcjU4MzIzMQ=="
+  }
+}

@@ -96,3 +96,40 @@ def clean_environment(monkeypatch):
     # Remove GITHUB_TOKEN if it exists
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     return monkeypatch
+
+# New fixtures for gist update functionality
+
+@pytest.fixture
+def existing_gist_fixture():
+    """Fixture for existing gist response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "existing_gist.json") as f:
+        return json.load(f)
+
+@pytest.fixture
+def updated_gist_fixture():
+    """Fixture for updated gist response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "updated_gist.json") as f:
+        return json.load(f)
+
+@pytest.fixture
+def gist_not_found_fixture():
+    """Fixture for gist not found error response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "gist_not_found.json") as f:
+        return json.load(f)
+
+@pytest.fixture
+def validation_error_fixture():
+    """Fixture for validation error response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "validation_error.json") as f:
+        return json.load(f)
+
+@pytest.fixture
+def auth_error_fixture():
+    """Fixture for authentication error response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "auth_error.json") as f:
+        return json.load(f)

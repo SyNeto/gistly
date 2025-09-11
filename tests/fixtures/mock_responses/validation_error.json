@@ -1,0 +1,11 @@
+{
+  "message": "Validation Failed",
+  "errors": [
+    {
+      "resource": "Gist",
+      "code": "invalid",
+      "field": "files"
+    }
+  ],
+  "documentation_url": "https://docs.github.com/rest/reference/gists#update-a-gist"
+}
