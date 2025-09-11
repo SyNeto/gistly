@@ -186,6 +186,50 @@ gist from-dir [DIRECTORY] --patterns PATTERN [PATTERN...] [OPTIONS]
 - `-p, --public` - Make the gist public (default: private)
 - `-o, --output [text|json]` - Output format (default: text)
 
+### `gist update`
+
+Update an existing gist by adding, modifying, or removing files.
+
+```bash
+gist update GIST_ID [FILES...] [OPTIONS]
+```
+
+**Arguments:**
+- `GIST_ID` - The ID or URL of the gist to update
+- `FILES` - Local files to add or update in the gist
+
+**Options:**
+- `-d, --description TEXT` - Update gist description
+- `--from-dir DIRECTORY` - Update from directory instead of individual files
+- `--patterns TEXT` - File patterns when using --from-dir (e.g., "*.py" "*.md")
+- `--add PATH` - Explicitly add new files
+- `--remove TEXT` - Remove files from gist (by filename)
+- `--sync` - Sync mode: remove gist files not present in directory
+- `--dry-run` - Show what would be changed without making changes
+- `--force` - Skip confirmation prompts
+- `-o, --output [text|json]` - Output format (default: text)
+
+**Examples:**
+```bash
+# Update individual files
+gist update abc123def456 main.py utils.py
+
+# Update from directory
+gist update abc123def456 --from-dir ./src --patterns "*.py" "*.md"
+
+# Sync directory (remove files not in directory)
+gist update abc123def456 --from-dir ./src --patterns "*.py" --sync
+
+# Explicit operations
+gist update abc123def456 --add new_file.py --remove old_file.py
+
+# Update description only
+gist update abc123def456 --description "Updated version"
+
+# Preview changes
+gist update abc123def456 *.py --dry-run
+```
+
 ### `quick-gist`
 
 Create a quick gist from stdin.
@@ -225,6 +269,12 @@ echo "def fibonacci(n): return n if n <= 1 else fibonacci(n-1) + fibonacci(n-2)"
 
 # Share command output
 docker ps | quick-gist -f "running_containers.txt" -d "Current Docker containers"
+
+# Update existing gist with new version
+gist update abc123def456 script.py -d "Updated script with bug fixes"
+
+# Sync project files to existing gist
+gist update abc123def456 --from-dir ./src --patterns "*.py" "*.md" --sync
 ```
 
 ### Integration with Other Tools
