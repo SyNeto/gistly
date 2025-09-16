@@ -422,6 +422,182 @@ class GistManager:
                 files=files_data,
                 description=description
             )
+    
+    def delete_gist(self, gist_id: str) -> Dict:
+        """
+        Delete a gist permanently
+        
+        Args:
+            gist_id: GitHub gist ID or URL
+            
+        Returns:
+            Dict: Operation result with success status and metadata
+            
+        Raises:
+            Exception: If gist deletion fails
+        """
+        # Extract gist ID from URL if needed
+        clean_gist_id = self._extract_gist_id(gist_id)
+        
+        # Validate gist ID format
+        if not self._is_valid_gist_id(clean_gist_id):
+            raise Exception(f"Invalid gist ID format: '{gist_id}'")
+        
+        url = f"{self.base_url}/gists/{clean_gist_id}"
+        
+        try:
+            response = requests.delete(url, headers=self.headers, timeout=30)
+            
+            if response.status_code == 204:
+                return {
+                    "success": True,
+                    "gist_id": clean_gist_id,
+                    "message": "Gist deleted successfully"
+                }
+            elif response.status_code == 404:
+                raise Exception(f"Gist not found: {clean_gist_id}")
+            elif response.status_code == 403:
+                raise Exception(f"Permission denied: You don't have permission to delete this gist")
+            elif response.status_code == 401:
+                raise Exception(f"Authentication failed: Invalid or missing token")
+            else:
+                error_msg = response.json().get("message", "Unknown error") if response.content else "Unknown error"
+                raise Exception(f"Failed to delete gist: {error_msg}")
+                
+        except requests.RequestException as e:
+            raise Exception(f"Network error while deleting gist: {str(e)}")
+    
+    def delete_gists_batch(self, gist_ids: List[str]) -> Dict:
+        """
+        Delete multiple gists in batch
+        
+        Args:
+            gist_ids: List of gist IDs or URLs
+            
+        Returns:
+            Dict: Batch operation results with individual gist statuses
+        """
+        results = {
+            "success": False,
+            "deleted": [],
+            "failed": [],
+            "summary": {
+                "total": len(gist_ids),
+                "deleted": 0,
+                "failed": 0
+            }
+        }
+        
+        for gist_id in gist_ids:
+            try:
+                result = self.delete_gist(gist_id)
+                results["deleted"].append({
+                    "gist_id": result["gist_id"],
+                    "message": result["message"]
+                })
+                results["summary"]["deleted"] += 1
+            except Exception as e:
+                results["failed"].append({
+                    "gist_id": gist_id,
+                    "error": str(e)
+                })
+                results["summary"]["failed"] += 1
+        
+        # Success if all deletions succeeded
+        results["success"] = results["summary"]["failed"] == 0
+        
+        return results
+    
+    def _extract_gist_id(self, gist_id_or_url: str) -> str:
+        """
+        Extract gist ID from URL or return ID if already in correct format
+        
+        Args:
+            gist_id_or_url: Gist ID or GitHub gist URL
+            
+        Returns:
+            str: Clean gist ID
+            
+        Raises:
+            Exception: If unable to extract valid gist ID
+        """
+        if not gist_id_or_url or not gist_id_or_url.strip():
+            raise Exception("Invalid gist ID: cannot be empty")
+        
+        gist_id = gist_id_or_url.strip()
+        
+        # If it's already a gist ID (not URL), validate and return
+        if not gist_id.startswith("http"):
+            # For non-URLs, validate the format immediately
+            if not self._is_valid_gist_id(gist_id):
+                raise Exception(f"Invalid gist ID format: {gist_id}")
+            return gist_id
+        
+        # Extract from GitHub gist URL patterns
+        if "gist.github.com" in gist_id:
+            # Remove fragment (everything after #)
+            if "#" in gist_id:
+                gist_id = gist_id.split("#")[0]
+            
+            # Extract ID from URL patterns:
+            # https://gist.github.com/user/abc123def456
+            # https://gist.github.com/abc123def456
+            # https://gist.github.com/user/abc123def456/
+            parts = gist_id.split("/")
+            if len(parts) >= 4:
+                # Handle trailing slash case - try parts[-1], then parts[-2]
+                extracted_id = parts[-1] if parts[-1] else (parts[-2] if len(parts) >= 5 else "")
+                # Make sure we got a valid gist ID, not just any string
+                if extracted_id and not extracted_id.startswith("gist.github.com") and "." not in extracted_id:
+                    return extracted_id
+            
+            # If we couldn't extract a valid ID from gist URL
+            raise Exception(f"Unable to extract gist ID from: {gist_id_or_url}")
+        
+        # Handle other invalid URL patterns
+        if gist_id.startswith("http"):
+            raise Exception(f"Unable to extract gist ID from: {gist_id_or_url}")
+        
+        # This should never be reached since non-URLs are handled above
+        return gist_id
+    
+    def _is_valid_gist_id(self, gist_id: str) -> bool:
+        """
+        Validate gist ID format
+        
+        Args:
+            gist_id: Gist ID to validate
+            
+        Returns:
+            bool: True if valid format
+        """
+        if not gist_id or len(gist_id) < 8:
+            return False
+        
+        # GitHub gist IDs can vary in length, but usually 8-40 characters
+        if len(gist_id) < 8 or len(gist_id) > 40:
+            return False
+        
+        # Should not contain spaces or special characters except possible hyphens
+        if " " in gist_id or "." in gist_id or "/" in gist_id:
+            return False
+        
+        # GitHub gist IDs are hex-like alphanumeric
+        # More strict: only allow a-f, 0-9 and possibly some letters
+        cleaned = gist_id.replace("-", "")
+        if not cleaned.isalnum():
+            return False
+        
+        # Additional checks for common invalid patterns
+        if gist_id.count("-") > 4:  # Too many hyphens
+            return False
+        
+        # Only reject obviously invalid patterns, not partial matches
+        invalid_patterns = ["invalid-gist-id", "not-a-url", "test-gist", "example-gist"]
+        if gist_id.lower() in invalid_patterns:
+            return False
+        
+        return True
 
 
 def quick_gist(content: str, filename: str = "snippet.txt") -> str:

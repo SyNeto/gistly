@@ -546,3 +546,176 @@ class TestQuickGist:
                 quick_gist("test content")
             
             assert "API Error" in str(exc_info.value)
+
+
+class TestGistDelete:
+    """Test cases for gist deletion functionality"""
+    
+    @responses.activate
+    def test_delete_gist_success(self, mock_github_token):
+        """Test successful gist deletion"""
+        gist_id = "abc123def456"
+        responses.add(
+            responses.DELETE,
+            f"https://api.github.com/gists/{gist_id}",
+            status=204
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.delete_gist(gist_id)
+        
+        assert result["success"] is True
+        assert result["gist_id"] == gist_id
+        assert result["message"] == "Gist deleted successfully"
+    
+    @responses.activate
+    def test_delete_gist_not_found(self, mock_github_token):
+        """Test deletion of non-existent gist"""
+        gist_id = "nonexistent123"
+        responses.add(
+            responses.DELETE,
+            f"https://api.github.com/gists/{gist_id}",
+            json={"message": "Not Found"},
+            status=404
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.delete_gist(gist_id)
+        
+        assert "not found" in str(exc_info.value).lower()
+    
+    @responses.activate
+    def test_delete_gist_permission_denied(self, mock_github_token):
+        """Test deletion of gist without permission"""
+        gist_id = "notmine123"
+        responses.add(
+            responses.DELETE,
+            f"https://api.github.com/gists/{gist_id}",
+            json={"message": "Must have admin rights to Repository."},
+            status=403
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.delete_gist(gist_id)
+        
+        assert "permission" in str(exc_info.value).lower()
+    
+    @responses.activate
+    def test_delete_gist_invalid_token(self, mock_github_token):
+        """Test deletion with invalid token"""
+        gist_id = "abc123def456"
+        responses.add(
+            responses.DELETE,
+            f"https://api.github.com/gists/{gist_id}",
+            json={"message": "Bad credentials"},
+            status=401
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.delete_gist(gist_id)
+        
+        assert "authentication" in str(exc_info.value).lower()
+    
+    def test_delete_gist_invalid_id_format(self, mock_github_token):
+        """Test deletion with invalid gist ID format"""
+        manager = GistManager(token=mock_github_token)
+        
+        invalid_ids = ["", "invalid", "not-a-gist-id", "123"]
+        
+        for invalid_id in invalid_ids:
+            with pytest.raises(Exception) as exc_info:
+                manager.delete_gist(invalid_id)
+            
+            assert "invalid" in str(exc_info.value).lower()
+    
+    @responses.activate
+    def test_delete_gists_batch_success(self, mock_github_token):
+        """Test successful batch deletion of multiple gists"""
+        gist_ids = ["abc123def456", "xyz789abc012", "mno345pqr678"]
+        
+        for gist_id in gist_ids:
+            responses.add(
+                responses.DELETE,
+                f"https://api.github.com/gists/{gist_id}",
+                status=204
+            )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.delete_gists_batch(gist_ids)
+        
+        assert result["success"] is True
+        assert len(result["deleted"]) == 3
+        assert len(result["failed"]) == 0
+        assert result["summary"]["total"] == 3
+        assert result["summary"]["deleted"] == 3
+        assert result["summary"]["failed"] == 0
+    
+    @responses.activate
+    def test_delete_gists_batch_mixed_results(self, mock_github_token):
+        """Test batch deletion with mixed success/failure results"""
+        gist_ids = ["success123", "notfound456", "noperm789"]
+        
+        responses.add(
+            responses.DELETE,
+            "https://api.github.com/gists/success123",
+            status=204
+        )
+        responses.add(
+            responses.DELETE,
+            "https://api.github.com/gists/notfound456",
+            json={"message": "Not Found"},
+            status=404
+        )
+        responses.add(
+            responses.DELETE,
+            "https://api.github.com/gists/noperm789",
+            json={"message": "Must have admin rights to Repository."},
+            status=403
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.delete_gists_batch(gist_ids)
+        
+        assert result["success"] is False  # Mixed results = not complete success
+        assert len(result["deleted"]) == 1
+        assert len(result["failed"]) == 2
+        assert result["summary"]["total"] == 3
+        assert result["summary"]["deleted"] == 1
+        assert result["summary"]["failed"] == 2
+    
+    def test_extract_gist_id_from_url(self, mock_github_token):
+        """Test extraction of gist ID from various URL formats"""
+        manager = GistManager(token=mock_github_token)
+        
+        test_cases = [
+            ("abc123def456", "abc123def456"),  # Already an ID
+            ("https://gist.github.com/user/abc123def456", "abc123def456"),
+            ("https://gist.github.com/abc123def456", "abc123def456"),
+            ("https://gist.github.com/user/abc123def456#file-test-py", "abc123def456"),
+        ]
+        
+        for input_val, expected in test_cases:
+            result = manager._extract_gist_id(input_val)
+            assert result == expected
+    
+    def test_extract_gist_id_invalid_formats(self, mock_github_token):
+        """Test extraction fails for invalid URL formats"""
+        manager = GistManager(token=mock_github_token)
+        
+        invalid_inputs = [
+            "",
+            "not-a-url",
+            "https://github.com/user/repo",
+            "https://gist.github.com/",
+            "invalid-gist-id"
+        ]
+        
+        for invalid_input in invalid_inputs:
+            with pytest.raises(Exception):
+                manager._extract_gist_id(invalid_input)
