@@ -719,3 +719,148 @@ class TestGistDelete:
         for invalid_input in invalid_inputs:
             with pytest.raises(Exception):
                 manager._extract_gist_id(invalid_input)
+
+
+class TestGistManagerList:
+    """Test cases for GistManager list functionality"""
+    
+    @responses.activate
+    def test_list_gists_success(self, mock_github_token, gist_list_fixture):
+        """Test successful gist listing"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=gist_list_fixture,
+            status=200
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.list_gists()
+        
+        assert result["gists"] == gist_list_fixture
+        assert result["total_count"] == len(gist_list_fixture)
+        assert result["page"] == 1
+        assert result["per_page"] == 30
+    
+    @responses.activate
+    def test_list_gists_with_pagination(self, mock_github_token, gist_list_fixture):
+        """Test gist listing with pagination parameters"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=gist_list_fixture,
+            status=200
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.list_gists(limit=10, page=2)
+        
+        assert result["gists"] == gist_list_fixture
+        assert result["page"] == 2
+        assert result["per_page"] == 10
+        
+        # Check that request was made with correct parameters
+        assert len(responses.calls) == 1
+        assert responses.calls[0].request.url.endswith("?per_page=10&page=2")
+    
+    @responses.activate
+    def test_list_gists_with_since_filter(self, mock_github_token, gist_list_fixture):
+        """Test gist listing with since date filter"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=gist_list_fixture,
+            status=200
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.list_gists(since="2024-01-01T00:00:00Z")
+        
+        assert result["gists"] == gist_list_fixture
+        
+        # Check that request was made with correct parameters
+        assert len(responses.calls) == 1
+        assert "since=2024-01-01T00%3A00%3A00Z" in responses.calls[0].request.url
+    
+    @responses.activate
+    def test_list_gists_authentication_error(self, mock_github_token, auth_error_fixture):
+        """Test authentication error handling"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=auth_error_fixture,
+            status=401
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.list_gists()
+        
+        assert "Failed to list gists: 401" in str(exc_info.value)
+    
+    @responses.activate  
+    def test_list_gists_rate_limit_error(self, mock_github_token):
+        """Test rate limit error handling"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json={"message": "API rate limit exceeded"},
+            status=403
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.list_gists()
+        
+        assert "Failed to list gists: 403" in str(exc_info.value)
+        assert "API rate limit exceeded" in str(exc_info.value)
+    
+    @responses.activate
+    def test_list_gists_network_error(self, mock_github_token):
+        """Test network error handling"""
+        # Don't add any responses to simulate network error
+        
+        manager = GistManager(token=mock_github_token)
+        
+        with pytest.raises(Exception) as exc_info:
+            manager.list_gists()
+        
+        assert "Network error while listing gists" in str(exc_info.value)
+    
+    @responses.activate
+    def test_list_gists_empty_results(self, mock_github_token):
+        """Test handling of empty gist list"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=[],
+            status=200
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.list_gists()
+        
+        assert result["gists"] == []
+        assert result["total_count"] == 0
+        assert result["has_more"] == False
+    
+    @responses.activate
+    def test_list_gists_limit_validation(self, mock_github_token, gist_list_fixture):
+        """Test that limit is properly validated and capped at 100"""
+        responses.add(
+            responses.GET,
+            "https://api.github.com/gists",
+            json=gist_list_fixture,
+            status=200
+        )
+        
+        manager = GistManager(token=mock_github_token)
+        result = manager.list_gists(limit=150)  # Over GitHub's limit
+        
+        assert result["per_page"] == 100  # Should be capped at 100
+        
+        # Check that request was made with correct parameters
+        assert len(responses.calls) == 1
+        assert "per_page=100" in responses.calls[0].request.url

@@ -4,7 +4,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from unittest.mock import patch, Mock
 
-from gist_manager.cli import main, quick_command, create, from_dir, config, update, delete
+from gist_manager.cli import main, quick_command, create, from_dir, config, update, delete, list
 
 
 class TestCreateCommand:
@@ -945,3 +945,176 @@ class TestDeleteCommand:
         assert "--dry-run" in result.output
         assert "--quiet" in result.output
         assert "--output" in result.output
+
+
+class TestListCommand:
+    """Test cases for 'gist list' command"""
+    
+    def test_list_command_basic(self):
+        """Test basic list command"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.return_value = {
+                "gists": [
+                    {
+                        "id": "aa5a315d61ae9438b18d",
+                        "description": "Hello World Examples",
+                        "public": True,
+                        "files": {"hello_world.rb": {"filename": "hello_world.rb", "language": "Ruby", "size": 167}},
+                        "created_at": "2010-04-14T02:15:15Z",
+                        "updated_at": "2011-01-26T19:06:43Z"
+                    }
+                ],
+                "total_count": 1,
+                "page": 1,
+                "per_page": 30,
+                "has_more": False
+            }
+            
+            result = runner.invoke(list, [])
+            
+            assert result.exit_code == 0
+            assert "aa5a315d61ae9438" in result.output  # Truncated ID
+            assert "Hello World Examples" in result.output
+            assert mock_manager.list_gists.called
+    
+    def test_list_command_json_output(self):
+        """Test list command with JSON output"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_data = {
+                "gists": [
+                    {
+                        "id": "aa5a315d61ae9438b18d",
+                        "description": "Hello World Examples",
+                        "public": True
+                    }
+                ],
+                "total_count": 1,
+                "page": 1,
+                "per_page": 30,
+                "has_more": False
+            }
+            mock_manager.list_gists.return_value = mock_data
+            
+            result = runner.invoke(list, ["--output", "json"])
+            
+            assert result.exit_code == 0
+            
+            # Parse and verify JSON output
+            output_data = json.loads(result.output)
+            assert output_data == mock_data
+            assert mock_manager.list_gists.called
+    
+    def test_list_command_minimal_output(self):
+        """Test list command with minimal output"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.return_value = {
+                "gists": [
+                    {
+                        "id": "aa5a315d61ae9438b18d",
+                        "description": "Hello World Examples",
+                        "public": True
+                    }
+                ],
+                "total_count": 1,
+                "page": 1,
+                "per_page": 30,
+                "has_more": False
+            }
+            
+            result = runner.invoke(list, ["--output", "minimal"])
+            
+            assert result.exit_code == 0
+            assert "aa5a315d61ae9438b18d  Hello World Examples" in result.output
+            assert mock_manager.list_gists.called
+    
+    def test_list_command_with_filters(self):
+        """Test list command with visibility and pagination filters"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.return_value = {
+                "gists": [],
+                "total_count": 0,
+                "page": 2,
+                "per_page": 10,
+                "has_more": False
+            }
+            
+            result = runner.invoke(list, ["--public", "--limit", "10", "--page", "2"])
+            
+            assert result.exit_code == 0
+            
+            # Verify the correct parameters were passed
+            mock_manager.list_gists.assert_called_with(
+                visibility="public",
+                since=None,
+                limit=10,
+                page=2
+            )
+    
+    def test_list_command_with_since_filter(self):
+        """Test list command with since date filter"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.return_value = {
+                "gists": [],
+                "total_count": 0,
+                "page": 1,
+                "per_page": 30,
+                "has_more": False
+            }
+            
+            result = runner.invoke(list, ["--since", "2024-01-01"])
+            
+            assert result.exit_code == 0
+            
+            # Verify the correct parameters were passed
+            mock_manager.list_gists.assert_called_with(
+                visibility=None,
+                since="2024-01-01",
+                limit=30,
+                page=1
+            )
+    
+    def test_list_command_error_handling(self):
+        """Test list command error handling"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.side_effect = Exception("Authentication error")
+            
+            result = runner.invoke(list, [])
+            
+            assert result.exit_code == 1
+            assert "Error: Authentication error" in result.output
+    
+    def test_list_command_error_json_output(self):
+        """Test list command error handling with JSON output"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.list_gists.side_effect = Exception("Network error")
+            
+            result = runner.invoke(list, ["--output", "json"])
+            
+            assert result.exit_code == 1
+            
+            # Parse JSON error output
+            output_data = json.loads(result.output)
+            assert output_data["operation"] == "list"
+            assert output_data["success"] is False
+            assert "Network error" in output_data["error"]

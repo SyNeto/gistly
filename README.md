@@ -4,14 +4,14 @@ A powerful CLI tool for managing GitHub Gists with ease. Create, organize, and s
 
 ## Features
 
-- 🚀 **Complete Gist Management** - Create, update, and delete gists with intuitive commands
+- 🚀 **Complete Gist Management** - Create, list, update, and delete gists with intuitive commands
 - 📁 **Directory Support** - Create and update gists from entire directories with pattern matching
 - ⚡ **Quick Gists** - Instantly create gists from stdin
 - 🗑️ **Safe Deletion** - Delete individual or multiple gists with confirmation prompts and dry-run mode
 - 🔧 **Flexible Configuration** - Multiple token sources (environment, config files)
 - 📊 **Multiple Output Formats** - Text and JSON output options for automation
 - 🛡️ **Robust Error Handling** - Clear error messages and proper exit codes
-- ✅ **Comprehensive Tests** - 101 tests with 77% coverage following TDD methodology
+- ✅ **Comprehensive Tests** - 116 tests with 78% coverage following TDD methodology
 
 ## Installation
 
@@ -138,6 +138,34 @@ cat script.py | quick-gist -f "script.py" -d "Backup of my script"
 ls -la | quick-gist -f "directory_listing.txt" -d "Project structure"
 ```
 
+### List and Browse Gists
+
+```bash
+# List all your gists
+gist list
+
+# List only public gists
+gist list --public
+
+# List only private gists  
+gist list --private
+
+# List with pagination
+gist list --limit 10 --page 2
+
+# List gists updated since a date
+gist list --since "2024-01-01"
+
+# JSON output for scripting
+gist list --output json
+
+# Minimal output (ID and description only)
+gist list --output minimal
+
+# Quiet mode (less verbose)
+gist list --quiet
+```
+
 ## Command Reference
 
 ### `gist config`
@@ -230,6 +258,46 @@ gist update abc123def456 --description "Updated version"
 # Preview changes
 gist update abc123def456 *.py --dry-run
 ```
+
+### `gist list`
+
+List your gists with filtering and pagination options.
+
+```bash
+gist list [OPTIONS]
+```
+
+**Options:**
+- `--public` - Show only public gists
+- `--private` - Show only private gists  
+- `--since TEXT` - Show gists updated after date (ISO 8601 or YYYY-MM-DD)
+- `--limit INTEGER` - Maximum results per page (1-100, default: 30)
+- `--page INTEGER` - Page number (default: 1)
+- `-o, --output [table|json|minimal]` - Output format (default: table)
+- `-q, --quiet` - Minimal output
+
+**Examples:**
+```bash
+# List all your gists
+gist list
+
+# List only public gists with pagination
+gist list --public --limit 10 --page 2
+
+# List recent gists as JSON
+gist list --since "2024-01-01" --output json
+
+# Simple ID and description list
+gist list --output minimal
+
+# Quiet table output
+gist list --quiet
+```
+
+**Output Formats:**
+- **table**: Formatted table with ID, description, visibility, file count, and update date
+- **json**: Complete JSON response for programmatic use
+- **minimal**: Simple "ID  Description" format for quick scanning
 
 ### `gist delete`
 

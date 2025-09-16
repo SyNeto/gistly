@@ -133,3 +133,10 @@ def auth_error_fixture():
     fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
     with open(fixtures_dir / "auth_error.json") as f:
         return json.load(f)
+
+@pytest.fixture
+def gist_list_fixture():
+    """Fixture for gist list API response"""
+    fixtures_dir = Path(__file__).parent / "fixtures" / "mock_responses"
+    with open(fixtures_dir / "gist_list.json") as f:
+        return json.load(f)
