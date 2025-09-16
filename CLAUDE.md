@@ -70,11 +70,11 @@ The project follows a modular Python package structure:
 
 - **`gist_manager/core.py`**: Main `GistManager` class with GitHub API integration
   - Automatic token discovery from multiple sources
-  - Methods: `create_gist()`, `create_from_directory()`, `_read_files_from_paths()`
+  - Methods: `create_gist()`, `create_from_directory()`, `update_gist()`, `delete_gist()`, `delete_gists_batch()`
   - Robust HTTP error handling and rate limiting awareness
 
 - **`gist_manager/cli.py`**: Click-based CLI interface
-  - Main commands: `gist create`, `gist from-dir`
+  - Main commands: `gist create`, `gist from-dir`, `gist update`, `gist delete`
   - Separate entry point: `quick-gist` for stdin input
   - Support for multiple output formats (text/json)
 
@@ -113,9 +113,43 @@ gist create [FILES...] --description "desc" --public
 # Create gist from directory with patterns
 gist from-dir [DIRECTORY] --patterns "*.py" "*.md"
 
+# Update existing gist
+gist update GIST_ID [FILES...] --description "updated desc"
+
+# Delete gist permanently
+gist delete GIST_ID --force
+
 # Quick gist from stdin
 echo "content" | quick-gist --filename "file.ext"
 ```
+
+### How to Upload Documents to Gists
+When Claude needs to share documents or code with the user, use Gistly:
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate
+
+# Create public gist with single file
+gist create /path/to/document.md --description "Document Title" --public
+
+# Create private gist (default)
+gist create /path/to/document.md --description "Document Title"
+
+# Create gist from multiple files
+gist create file1.py file2.md --description "Multiple files" --public
+
+# Create gist from directory
+gist from-dir ./docs --patterns "*.md" --description "Documentation" --public
+
+# Delete gists (use with caution)
+gist delete temp123 draft456 --force
+
+# Bulk delete from file
+gist delete --from-file cleanup-list.txt --force
+```
+
+**Important**: Always use `source venv/bin/activate` before using gist commands to ensure the tool works correctly.
 
 ### Error Handling
 - Clear authentication error messages
@@ -148,18 +182,18 @@ echo "content" | quick-gist --filename "file.ext"
 
 All modules have comprehensive test coverage:
 - **config.py**: 10 tests covering token discovery, config file handling, error cases
-- **core.py**: 14 tests covering GistManager, API integration, file operations
-- **cli.py**: 17 tests covering all CLI commands, options, error handling
+- **core.py**: 57 tests covering GistManager, API integration, file operations, delete functionality
+- **cli.py**: 34 tests covering all CLI commands, options, error handling
 
-Total: 41 tests, all passing.
+Total: 101 tests, all passing with 77% coverage.
 
 ## Development Priority (for future enhancements)
 
 1. **Additional Features** (following TDD)
    - List existing gists
-   - Update/edit existing gists
-   - Delete gists
-   - Bulk operations
+   - ✅ Update/edit existing gists (COMPLETED)
+   - ✅ Delete gists (COMPLETED)
+   - ✅ Bulk operations (COMPLETED)
 
 2. **Performance Optimizations**
    - Concurrent file reading for large directories

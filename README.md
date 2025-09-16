@@ -4,13 +4,14 @@ A powerful CLI tool for managing GitHub Gists with ease. Create, organize, and s
 
 ## Features
 
-- 🚀 **Simple CLI Interface** - Intuitive commands for all gist operations
-- 📁 **Directory Support** - Create gists from entire directories with pattern matching
+- 🚀 **Complete Gist Management** - Create, update, and delete gists with intuitive commands
+- 📁 **Directory Support** - Create and update gists from entire directories with pattern matching
 - ⚡ **Quick Gists** - Instantly create gists from stdin
+- 🗑️ **Safe Deletion** - Delete individual or multiple gists with confirmation prompts and dry-run mode
 - 🔧 **Flexible Configuration** - Multiple token sources (environment, config files)
-- 📊 **Multiple Output Formats** - Text and JSON output options
+- 📊 **Multiple Output Formats** - Text and JSON output options for automation
 - 🛡️ **Robust Error Handling** - Clear error messages and proper exit codes
-- ✅ **Comprehensive Tests** - 41 tests with >90% coverage following TDD methodology
+- ✅ **Comprehensive Tests** - 101 tests with 77% coverage following TDD methodology
 
 ## Installation
 
@@ -230,6 +231,50 @@ gist update abc123def456 --description "Updated version"
 gist update abc123def456 *.py --dry-run
 ```
 
+### `gist delete`
+
+Delete one or more gists permanently.
+
+⚠️ **WARNING**: This action is irreversible! All files, history, and metadata will be permanently lost.
+
+```bash
+gist delete GIST_IDS... [OPTIONS]
+```
+
+**Arguments:**
+- `GIST_IDS` - One or more gist IDs or URLs to delete
+
+**Options:**
+- `--force` - Skip confirmation prompts and delete immediately
+- `--from-file PATH` - Read gist IDs from file (one per line)
+- `--dry-run` - Show what would be deleted without actually deleting
+- `-q, --quiet` - Minimal output, only show errors
+- `-o, --output [text|json]` - Output format (default: text)
+
+**Examples:**
+```bash
+# Delete single gist (with confirmation)
+gist delete abc123def456
+
+# Delete multiple gists
+gist delete abc123def456 xyz789abc012 mno345pqr678
+
+# Force delete without confirmation
+gist delete abc123def456 --force
+
+# Delete gists listed in file
+gist delete --from-file gists-to-delete.txt
+
+# Preview what would be deleted
+gist delete abc123def456 xyz789abc012 --dry-run
+
+# Quiet mode for scripts
+gist delete abc123def456 --quiet --force
+
+# JSON output for automation
+gist delete abc123def456 --force --output json
+```
+
 ### `quick-gist`
 
 Create a quick gist from stdin.
@@ -275,6 +320,29 @@ gist update abc123def456 script.py -d "Updated script with bug fixes"
 
 # Sync project files to existing gist
 gist update abc123def456 --from-dir ./src --patterns "*.py" "*.md" --sync
+
+# Clean up old gists
+gist delete outdated123 temp456 --force
+
+# Remove multiple test gists
+gist delete --from-file test-gists.txt --force
+```
+
+### Gist Management
+
+```bash
+# Preview what gists would be deleted
+gist delete temp123 draft456 --dry-run
+
+# Safe deletion with confirmation
+gist delete abc123def456
+
+# Bulk deletion from file
+echo -e "gist1\ngist2\ngist3" > cleanup.txt
+gist delete --from-file cleanup.txt
+
+# Automated cleanup for CI/CD
+gist delete temp-build-* --force --quiet --output json
 ```
 
 ### Integration with Other Tools
