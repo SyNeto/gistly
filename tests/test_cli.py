@@ -4,7 +4,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from unittest.mock import patch, Mock
 
-from gist_manager.cli import main, quick_command, create, from_dir, config, update
+from gist_manager.cli import main, quick_command, create, from_dir, config, update, delete
 
 
 class TestCreateCommand:
@@ -640,3 +640,308 @@ class TestUpdateCommand:
         assert "--patterns" in result.output
         assert "--sync" in result.output
         assert "--dry-run" in result.output
+
+
+class TestDeleteCommand:
+    """Test cases for 'gist delete' command"""
+    
+    def test_delete_command_single_gist_success(self):
+        """Test successful deletion of single gist"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.return_value = {
+                "success": True,
+                "gist_id": "abc123def456",
+                "message": "Gist deleted successfully"
+            }
+            
+            # Test force deletion (skip confirmation)
+            result = runner.invoke(delete, ["abc123def456", "--force"])
+            
+            assert result.exit_code == 0
+            assert "✅ Gist abc123def456 deleted successfully!" in result.output
+            mock_manager.delete_gist.assert_called_once_with("abc123def456")
+    
+    def test_delete_command_single_gist_with_confirmation(self):
+        """Test deletion with user confirmation"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.return_value = {
+                "success": True,
+                "gist_id": "abc123def456",
+                "message": "Gist deleted successfully"
+            }
+            
+            # Simulate user typing 'yes' for confirmation
+            result = runner.invoke(delete, ["abc123def456"], input="yes\n")
+            
+            assert result.exit_code == 0
+            assert "⚠️  WARNING: This will permanently delete the gist!" in result.output
+            assert "✅ Gist abc123def456 deleted successfully!" in result.output
+    
+    def test_delete_command_single_gist_cancelled(self):
+        """Test deletion cancelled by user"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            
+            # Simulate user typing 'no' for confirmation
+            result = runner.invoke(delete, ["abc123def456"], input="no\n")
+            
+            assert result.exit_code == 0
+            assert "Deletion cancelled." in result.output
+            mock_manager.delete_gist.assert_not_called()
+    
+    def test_delete_command_batch_success(self):
+        """Test successful batch deletion"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gists_batch.return_value = {
+                "success": True,
+                "deleted": [
+                    {"gist_id": "abc123", "message": "Deleted"},
+                    {"gist_id": "def456", "message": "Deleted"}
+                ],
+                "failed": [],
+                "summary": {"total": 2, "deleted": 2, "failed": 0}
+            }
+            
+            result = runner.invoke(delete, ["abc123", "def456", "--force"])
+            
+            assert result.exit_code == 0
+            assert "✅ All 2 gists deleted successfully!" in result.output
+            mock_manager.delete_gists_batch.assert_called_once_with(["abc123", "def456"])
+    
+    def test_delete_command_batch_mixed_results(self):
+        """Test batch deletion with mixed success/failure"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gists_batch.return_value = {
+                "success": False,
+                "deleted": [{"gist_id": "abc123", "message": "Deleted"}],
+                "failed": [{"gist_id": "def456", "error": "Gist not found"}],
+                "summary": {"total": 2, "deleted": 1, "failed": 1}
+            }
+            
+            result = runner.invoke(delete, ["abc123", "def456", "--force"])
+            
+            assert result.exit_code == 0
+            assert "⚠️  Batch deletion completed with some errors:" in result.output
+            assert "✅ Deleted: 1" in result.output
+            assert "❌ Failed: 1" in result.output
+            assert "def456: Gist not found" in result.output
+    
+    def test_delete_command_batch_with_confirmation(self):
+        """Test batch deletion with confirmation"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gists_batch.return_value = {
+                "success": True,
+                "deleted": [],
+                "failed": [],
+                "summary": {"total": 2, "deleted": 2, "failed": 0}
+            }
+            
+            # User types "DELETE ALL" for confirmation
+            result = runner.invoke(delete, ["abc123", "def456"], input="DELETE ALL\n")
+            
+            assert result.exit_code == 0
+            assert "⚠️  WARNING: This will permanently delete 2 gists!" in result.output
+            assert "Type 'DELETE ALL' to confirm" in result.output
+    
+    def test_delete_command_dry_run_single(self):
+        """Test dry run for single gist"""
+        runner = CliRunner()
+        
+        result = runner.invoke(delete, ["abc123def456", "--dry-run"])
+        
+        assert result.exit_code == 0
+        assert "🔍 DRY RUN: Would delete gist abc123def456" in result.output
+        assert "To actually delete this gist, run:" in result.output
+    
+    def test_delete_command_dry_run_batch(self):
+        """Test dry run for multiple gists"""
+        runner = CliRunner()
+        
+        result = runner.invoke(delete, ["abc123", "def456", "ghi789", "--dry-run"])
+        
+        assert result.exit_code == 0
+        assert "🔍 DRY RUN: Would delete 3 gists" in result.output
+        assert "1. abc123" in result.output
+        assert "2. def456" in result.output
+        assert "3. ghi789" in result.output
+    
+    def test_delete_command_from_file(self, tmp_path):
+        """Test deletion from file"""
+        runner = CliRunner()
+        
+        # Create temporary file with gist IDs
+        gist_file = tmp_path / "gists.txt"
+        gist_file.write_text("abc123def456\nxyz789abc012\n")
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gists_batch.return_value = {
+                "success": True,
+                "deleted": [],
+                "failed": [],
+                "summary": {"total": 2, "deleted": 2, "failed": 0}
+            }
+            
+            result = runner.invoke(delete, ["--from-file", str(gist_file), "--force"])
+            
+            assert result.exit_code == 0
+            mock_manager.delete_gists_batch.assert_called_once_with(["abc123def456", "xyz789abc012"])
+    
+    def test_delete_command_from_file_plus_args(self, tmp_path):
+        """Test deletion from file plus command line args"""
+        runner = CliRunner()
+        
+        # Create temporary file with gist IDs
+        gist_file = tmp_path / "gists.txt"
+        gist_file.write_text("abc123def456\n")
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gists_batch.return_value = {
+                "success": True,
+                "deleted": [],
+                "failed": [],
+                "summary": {"total": 2, "deleted": 2, "failed": 0}
+            }
+            
+            result = runner.invoke(delete, ["xyz789", "--from-file", str(gist_file), "--force"])
+            
+            assert result.exit_code == 0
+            # Should combine both command line args and file contents
+            mock_manager.delete_gists_batch.assert_called_once_with(["xyz789", "abc123def456"])
+    
+    def test_delete_command_json_output(self):
+        """Test JSON output format"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.return_value = {
+                "success": True,
+                "gist_id": "abc123def456",
+                "message": "Gist deleted successfully"
+            }
+            
+            result = runner.invoke(delete, ["abc123def456", "--force", "--output", "json"])
+            
+            assert result.exit_code == 0
+            
+            # Parse JSON output
+            output_data = json.loads(result.output)
+            assert output_data["operation"] == "delete"
+            assert output_data["success"] is True
+            assert output_data["gist_id"] == "abc123def456"
+            assert output_data["message"] == "Gist deleted successfully"
+    
+    def test_delete_command_json_output_batch(self):
+        """Test JSON output for batch deletion"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            # Use the single gist delete method since we're passing one gist
+            mock_manager.delete_gist.return_value = {
+                "success": True,
+                "gist_id": "abc123",
+                "message": "Gist deleted successfully"
+            }
+            
+            result = runner.invoke(delete, ["abc123", "--force", "--output", "json"])
+            
+            assert result.exit_code == 0
+            
+            # Parse JSON output
+            output_data = json.loads(result.output)
+            assert output_data["operation"] == "delete"
+            assert output_data["success"] is True
+            assert output_data["gist_id"] == "abc123"
+    
+    def test_delete_command_quiet_mode(self):
+        """Test quiet mode output"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.return_value = {
+                "success": True,
+                "gist_id": "abc123def456",
+                "message": "Gist deleted successfully"
+            }
+            
+            result = runner.invoke(delete, ["abc123def456", "--force", "--quiet"])
+            
+            assert result.exit_code == 0
+            # Should have minimal output in quiet mode
+            assert result.output.strip() == ""
+    
+    def test_delete_command_error_handling(self):
+        """Test error handling in delete command"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.side_effect = Exception("Gist not found")
+            
+            result = runner.invoke(delete, ["abc123def456", "--force"])
+            
+            assert result.exit_code == 1
+            assert "Error: Gist not found" in result.output
+    
+    def test_delete_command_error_handling_json(self):
+        """Test error handling with JSON output"""
+        runner = CliRunner()
+        
+        with patch("gist_manager.cli.GistManager") as mock_manager_class:
+            mock_manager = mock_manager_class.return_value
+            mock_manager.delete_gist.side_effect = Exception("Network error")
+            
+            result = runner.invoke(delete, ["abc123def456", "--force", "--output", "json"])
+            
+            assert result.exit_code == 1
+            
+            # Parse JSON error output
+            output_data = json.loads(result.output)
+            assert output_data["operation"] == "delete"
+            assert output_data["success"] is False
+            assert "Network error" in output_data["error"]
+    
+    def test_delete_command_no_gist_ids(self):
+        """Test error when no gist IDs provided"""
+        runner = CliRunner()
+        
+        result = runner.invoke(delete, [])
+        
+        assert result.exit_code == 1  # Our custom error handling
+        assert "Error: No gist IDs specified" in result.output
+    
+    def test_delete_command_help(self):
+        """Test delete command help"""
+        runner = CliRunner()
+        
+        result = runner.invoke(delete, ["--help"])
+        
+        assert result.exit_code == 0
+        assert "Delete one or more gists permanently" in result.output
+        assert "⚠️  WARNING: This action is irreversible!" in result.output
+        assert "--force" in result.output
+        assert "--from-file" in result.output
+        assert "--dry-run" in result.output
+        assert "--quiet" in result.output
+        assert "--output" in result.output

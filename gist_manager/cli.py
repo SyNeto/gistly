@@ -429,5 +429,182 @@ def update(gist_id, files, description, from_dir, patterns, add, remove, sync, d
         sys.exit(1)
 
 
+@main.command()
+@click.argument('gist_ids', nargs=-1, required=False)
+@click.option('--force', is_flag=True, 
+              help='Skip confirmation prompts and delete immediately')
+@click.option('--from-file', type=click.Path(exists=True), 
+              help='Read gist IDs from file (one per line)')
+@click.option('--dry-run', is_flag=True, 
+              help='Show what would be deleted without actually deleting')
+@click.option('--quiet', '-q', is_flag=True, 
+              help='Minimal output, only show errors')
+@click.option('--output', '-o', type=click.Choice(['text', 'json']), default='text',
+              help='Output format')
+def delete(gist_ids, force, from_file, dry_run, quiet, output):
+    """Delete one or more gists permanently
+    
+    GIST_IDS: One or more gist IDs or URLs to delete
+    
+    ⚠️  WARNING: This action is irreversible!
+    All files, history, and metadata will be permanently lost.
+    
+    Examples:
+    
+        # Delete single gist
+        gist delete abc123def456
+        
+        # Delete multiple gists
+        gist delete abc123def456 xyz789abc012 mno345pqr678
+        
+        # Force delete without confirmation
+        gist delete abc123def456 --force
+        
+        # Delete gists listed in file
+        gist delete --from-file gists-to-delete.txt
+        
+        # Preview what would be deleted
+        gist delete abc123def456 xyz789abc012 --dry-run
+        
+        # Quiet mode (minimal output)
+        gist delete abc123def456 --quiet --force
+        
+        # JSON output for scripting
+        gist delete abc123def456 --force --output json
+    """
+    try:
+        # Collect all gist IDs
+        all_gist_ids = list(gist_ids)
+        
+        # Read additional IDs from file if specified
+        if from_file:
+            with open(from_file, 'r') as f:
+                file_ids = [line.strip() for line in f if line.strip()]
+                all_gist_ids.extend(file_ids)
+        
+        if not all_gist_ids:
+            click.echo("Error: No gist IDs specified", err=True)
+            sys.exit(1)
+        
+        # Initialize GistManager
+        manager = GistManager()
+        
+        # Handle single vs batch deletion
+        if len(all_gist_ids) == 1:
+            gist_id = all_gist_ids[0]
+            
+            if dry_run:
+                # Dry run: just show what would be deleted
+                try:
+                    # We can't get gist info without making API call, so just show the ID
+                    if output == 'json':
+                        result = {
+                            "operation": "delete",
+                            "dry_run": True,
+                            "gist_id": gist_id,
+                            "message": "Would delete this gist"
+                        }
+                        click.echo(json.dumps(result, indent=2))
+                    else:
+                        click.echo(f"🔍 DRY RUN: Would delete gist {gist_id}")
+                        click.echo("\nTo actually delete this gist, run:")
+                        click.echo(f"  gist delete {gist_id}")
+                except Exception as e:
+                    click.echo(f"Error: {e}", err=True)
+                    sys.exit(1)
+                return
+            
+            # Show confirmation unless force is used
+            if not force and not quiet:
+                click.echo(f"⚠️  WARNING: This will permanently delete the gist!")
+                click.echo(f"\nGist ID: {gist_id}")
+                click.echo("\nThis action CANNOT be undone. All files and history will be lost.")
+                
+                if not click.confirm("Type 'yes' to confirm deletion", default=False):
+                    click.echo("Deletion cancelled.")
+                    return
+            
+            # Delete the gist
+            result = manager.delete_gist(gist_id)
+            
+            if output == 'json':
+                response = {
+                    "operation": "delete",
+                    "success": result["success"],
+                    "gist_id": result["gist_id"],
+                    "message": result["message"]
+                }
+                click.echo(json.dumps(response, indent=2))
+            else:
+                if not quiet:
+                    click.echo(f"✅ Gist {result['gist_id']} deleted successfully!")
+        
+        else:
+            # Batch deletion
+            if dry_run:
+                # Dry run: show what would be deleted
+                if output == 'json':
+                    result = {
+                        "operation": "delete",
+                        "dry_run": True,
+                        "gists": [{"id": gid, "message": "Would delete"} for gid in all_gist_ids],
+                        "total": len(all_gist_ids)
+                    }
+                    click.echo(json.dumps(result, indent=2))
+                else:
+                    click.echo(f"🔍 DRY RUN: Would delete {len(all_gist_ids)} gists")
+                    click.echo("\nGists that would be deleted:")
+                    for i, gid in enumerate(all_gist_ids, 1):
+                        click.echo(f"  {i}. {gid}")
+                    click.echo(f"\nTo actually delete these gists, run:")
+                    click.echo(f"  gist delete {' '.join(all_gist_ids)}")
+                return
+            
+            # Show batch confirmation unless force is used
+            if not force and not quiet:
+                click.echo(f"⚠️  WARNING: This will permanently delete {len(all_gist_ids)} gists!")
+                click.echo(f"\nGists to delete:")
+                for i, gid in enumerate(all_gist_ids, 1):
+                    click.echo(f"  {i}. {gid}")
+                click.echo("\nThis action CANNOT be undone. All files and history will be lost.")
+                
+                confirm_text = "DELETE ALL" if len(all_gist_ids) > 1 else "DELETE"
+                user_input = click.prompt(f"Type '{confirm_text}' to confirm", default="", show_default=False)
+                if user_input != confirm_text:
+                    click.echo("Deletion cancelled.")
+                    return
+            
+            # Delete all gists
+            result = manager.delete_gists_batch(all_gist_ids)
+            
+            if output == 'json':
+                click.echo(json.dumps(result, indent=2))
+            else:
+                if not quiet:
+                    if result["success"]:
+                        click.echo(f"✅ All {result['summary']['deleted']} gists deleted successfully!")
+                    else:
+                        click.echo(f"⚠️  Batch deletion completed with some errors:")
+                        click.echo(f"  ✅ Deleted: {result['summary']['deleted']}")
+                        click.echo(f"  ❌ Failed: {result['summary']['failed']}")
+                        
+                        if result["failed"]:
+                            click.echo("\nErrors:")
+                            for failed in result["failed"]:
+                                click.echo(f"  {failed['gist_id']}: {failed['error']}")
+    
+    except Exception as e:
+        if output == 'json':
+            error_response = {
+                "operation": "delete",
+                "success": False,
+                "error": str(e)
+            }
+            click.echo(json.dumps(error_response, indent=2))
+        else:
+            click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     main()
