@@ -606,5 +606,83 @@ def delete(gist_ids, force, from_file, dry_run, quiet, output):
         sys.exit(1)
 
 
+@main.command()
+@click.option('--public', 'visibility', flag_value='public', help='Show only public gists')
+@click.option('--private', 'visibility', flag_value='private', help='Show only private gists')
+@click.option('--since', help='Show gists updated after date (ISO 8601 or YYYY-MM-DD)')
+@click.option('--limit', type=int, default=30, help='Maximum results per page (1-100)')
+@click.option('--page', type=int, default=1, help='Page number')
+@click.option('--output', '-o', type=click.Choice(['table', 'json', 'minimal']), default='table', 
+              help='Output format')
+@click.option('--quiet', '-q', is_flag=True, help='Minimal output')
+def list(visibility, since, limit, page, output, quiet):
+    """List your gists with filtering and pagination options
+    
+    Examples:
+    
+        # List all gists
+        gist list
+        
+        # List only public gists
+        gist list --public
+        
+        # List with pagination
+        gist list --limit 10 --page 2
+        
+        # JSON output for scripting
+        gist list --output json
+        
+        # Show gists updated since date
+        gist list --since "2024-01-01"
+    """
+    try:
+        # Initialize GistManager
+        manager = GistManager()
+        
+        # Call list_gists with parameters
+        result = manager.list_gists(
+            visibility=visibility,
+            since=since,
+            limit=limit,
+            page=page
+        )
+        
+        if output == 'json':
+            click.echo(json.dumps(result, indent=2))
+        elif output == 'minimal':
+            for gist in result['gists']:
+                click.echo(f"{gist['id']}  {gist.get('description', 'No description')}")
+        else:  # table format
+            if not quiet:
+                click.echo("ID\t\t\tDescription\t\tPublic\tFiles\tUpdated")
+                click.echo("─" * 80)
+            
+            for gist in result['gists']:
+                gist_id = gist['id'][:16] + "..."
+                description = (gist.get('description', 'No description')[:30] + "...") if len(gist.get('description', '')) > 30 else gist.get('description', 'No description')
+                public = "✓" if gist.get('public', False) else "✗"
+                file_count = len(gist.get('files', {}))
+                updated = gist.get('updated_at', '')[:10]  # Just date part
+                
+                click.echo(f"{gist_id}\t{description}\t{public}\t{file_count}\t{updated}")
+            
+            if not quiet:
+                click.echo(f"\nTotal: {result['total_count']} gists")
+                if result.get('has_more'):
+                    click.echo(f"Use --page {page + 1} to see more results")
+    
+    except Exception as e:
+        if output == 'json':
+            error_response = {
+                "operation": "list",
+                "success": False,
+                "error": str(e)
+            }
+            click.echo(json.dumps(error_response, indent=2))
+        else:
+            click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     main()

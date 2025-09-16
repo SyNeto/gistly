@@ -598,6 +598,68 @@ class GistManager:
             return False
         
         return True
+    
+    def list_gists(
+        self, 
+        visibility: Optional[str] = None,
+        since: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: int = 1,
+        fetch_all: bool = False
+    ) -> Dict:
+        """
+        List gists with filtering and pagination.
+        
+        Args:
+            visibility: 'public', 'private', or None for both
+            since: ISO 8601 timestamp to filter by update date
+            limit: Maximum results per page (1-100, default 30)
+            page: Page number (default 1)
+            fetch_all: Fetch all results ignoring pagination
+            
+        Returns:
+            Dict: {
+                'gists': [list of gist objects],
+                'total_count': int,
+                'page': int,
+                'per_page': int,
+                'has_more': bool
+            }
+        """
+        try:
+            # Build query parameters
+            params = {}
+            per_page = limit if limit else 30
+            actual_per_page = min(per_page, 100)  # GitHub's limit
+            params['per_page'] = actual_per_page
+            params['page'] = page
+            
+            if since:
+                params['since'] = since
+            
+            response = requests.get(
+                f"{self.base_url}/gists",
+                headers=self.headers,
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                gists = response.json()
+                
+                return {
+                    'gists': gists,
+                    'total_count': len(gists),
+                    'page': page,
+                    'per_page': actual_per_page,
+                    'has_more': len(gists) == actual_per_page
+                }
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                raise Exception(f"Failed to list gists: {response.status_code} - {error_data.get('message', 'Unknown error')}")
+                
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Network error while listing gists: {e}")
 
 
 def quick_gist(content: str, filename: str = "snippet.txt") -> str:

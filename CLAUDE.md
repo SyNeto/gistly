@@ -113,6 +113,9 @@ gist create [FILES...] --description "desc" --public
 # Create gist from directory with patterns
 gist from-dir [DIRECTORY] --patterns "*.py" "*.md"
 
+# List user's gists
+gist list --public --limit 10
+
 # Update existing gist
 gist update GIST_ID [FILES...] --description "updated desc"
 
@@ -182,15 +185,15 @@ gist delete --from-file cleanup-list.txt --force
 
 All modules have comprehensive test coverage:
 - **config.py**: 10 tests covering token discovery, config file handling, error cases
-- **core.py**: 57 tests covering GistManager, API integration, file operations, delete functionality
-- **cli.py**: 34 tests covering all CLI commands, options, error handling
+- **core.py**: 65 tests covering GistManager, API integration, file operations, list functionality, delete functionality
+- **cli.py**: 41 tests covering all CLI commands, options, error handling
 
-Total: 101 tests, all passing with 77% coverage.
+Total: 116 tests, all passing with 78% coverage.
 
 ## Development Priority (for future enhancements)
 
 1. **Additional Features** (following TDD)
-   - List existing gists
+   - ✅ List existing gists (COMPLETED)
    - ✅ Update/edit existing gists (COMPLETED)
    - ✅ Delete gists (COMPLETED)
    - ✅ Bulk operations (COMPLETED)
